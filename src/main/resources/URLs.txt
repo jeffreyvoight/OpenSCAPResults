@@ -1,0 +1,2 @@
+https://www.redhat.com/security/data/metrics/ds/v2/RHEL7/rhel-7.7-eus.ds.xml.bz2
+https://people.canonical.com/~ubuntu-security/oval/com.ubuntu.$(lsb_release -cs).cve.oval.xml.bz2
