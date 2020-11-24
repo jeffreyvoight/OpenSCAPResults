@@ -1,18 +1,18 @@
 package org.voight.openscapresults.objects;
-import org.apache.log4j.Logger;
 
+import org.apache.log4j.Logger;
 import java.util.Formatter;
 
 public class CVE {
-    private static Logger log = Logger.getLogger(CVE.class);
-    private String dateStamp;
-    private String hostname;
-    private String vulnerable;
-    private String refId;
-    private String refUrl;
-    private String title;
-    private String severity;
-    private String description;
+    private static final Logger log = Logger.getLogger(CVE.class);
+    private final String dateStamp;
+    private final String hostname;
+    private final String vulnerable;
+    private final String refId;
+    private final String refUrl;
+    private final String title;
+    private final String severity;
+    private final String description;
 
     public CVE(String dateStamp, String hostname, String vulnerable, String refId, String refUrl, String title, String severity, String description) {
         this.dateStamp = dateStamp;
@@ -34,10 +34,6 @@ public class CVE {
         formatter.format("\"description\" : \"%s\"}%n", description.replaceAll(",", "\\,").replaceAll("\\n", " "));
         log.debug(builder.toString());
         return builder.toString();
-    }
-
-    public String getRefId() {
-        return refId;
     }
 
     /**

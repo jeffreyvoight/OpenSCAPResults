@@ -2,61 +2,36 @@ package org.voight.openscapresults;
 
 import java.io.File;
 import java.io.IOException;
-
 import org.apache.log4j.Logger;
 import org.voight.openscapresults.io.*;
-import org.voight.openscapresults.objects.OvalResults;
-import org.voight.openscapresults.objects.Results;
-import org.voight.openscapresults.objects.XCCDFResults;
 import org.xml.sax.SAXException;
-
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.xpath.XPathExpressionException;
-
 
 public class SCAPResults {
     private static final Logger log = Logger.getLogger(SCAPResults.class);
 
     public enum FileType {
-        oval,
-        xccdf;
+        OVAL,
+        XCCDF;
     }
-    private final File inputFile;
-    private final FileType fileType;
-    private final String elasticHost;
-    private final int elasticPort;
-    private final String elasticUser;
-    private final String elasticPass;
-    private final String indexName;
 
-    public SCAPResults(String inputFile, String elasticHost, int elasticPort, String elasticUser, String elasticPass, String indexName, FileType fileType) throws IOException, SAXException, ParserConfigurationException, XPathExpressionException {
-        this.inputFile = new File(inputFile);
-        this.elasticHost = elasticHost;
-        this.elasticPort = elasticPort;
-        this.elasticUser = elasticUser;
-        this.elasticPass = elasticPass;
-        this.indexName = indexName;
-        this.fileType = fileType;
-        OSCAPFileReader fileReader;
-        JSONWriter jsonWriter;
-        Results results;
+    public SCAPResults(String inputFileName, String elasticHost, int elasticPort, String elasticUser, String elasticPass, String indexName, FileType fileType) throws IOException, SAXException, ParserConfigurationException, XPathExpressionException {
+        File inputFile = new File(inputFileName);
+        OSCAPFileReader fileReader = null;
+        ElasticWriter elasticWriter = new ElasticWriter(elasticHost, elasticPort, elasticUser, elasticPass, indexName);
+        log.info(String.format("Reading from file: %s", inputFile.getName()));
         switch(fileType){
-            case oval:
-                log.info(String.format("Reading from file: %s", this.inputFile.getName()));
-                fileReader = new OvalFileReader(this.inputFile);
-                jsonWriter = new JSONOvalWriter(elasticHost, elasticPort, elasticUser, elasticPass, indexName);
-                results = fileReader.parse();
-                jsonWriter.write((OvalResults)results);
+            case OVAL:
+                fileReader = new OvalFileReader(inputFile, elasticWriter);
                 break;
-            case xccdf:
-                fileReader = new XCCDFFileReader(this.inputFile);
-                jsonWriter = new JSONXccdfWriter(elasticHost, elasticPort, elasticUser, elasticPass, indexName);
-                results = fileReader.parse();
-                jsonWriter.write((XCCDFResults)results);
+            case XCCDF:
+                fileReader = new XCCDFFileReader(inputFile, elasticWriter);
                 break;
             default:
                 usageInstructions();
         }
+        log.info("Processed " + fileReader.getCount() + " entries.");
     }
 
     public static void main(String[] argv){
@@ -74,7 +49,7 @@ public class SCAPResults {
             String[] elasticParts = argv[2].split(":");
             String user = elasticParts[0];
             String password = elasticParts[1];
-            new SCAPResults(argv[0], hostName, hostPort, user, password, argv[3], FileType.valueOf(argv[4]));
+            new SCAPResults(argv[0], hostName, hostPort, user, password, argv[3], FileType.valueOf(argv[4].toUpperCase()));
         } catch(Exception e){
             log.error("Something bad happened:", e);
             usageInstructions();

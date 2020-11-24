@@ -1,7 +1,6 @@
 package org.voight.openscapresults.io;
 
 import org.voight.openscapresults.objects.CVE;
-import org.voight.openscapresults.objects.OvalResults;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
@@ -21,47 +20,51 @@ import java.util.Calendar;
 
 public class OvalFileReader extends OSCAPFileReader {
     Logger log = Logger.getLogger(OvalFileReader.class);
+    private final String resultsPath="/oval_results/results/system/definitions/definition[@result='true']";
+    private final String titlePath = "metadata/title";
+    private final String referencePath = "metadata/reference";
+    private final String severityPath = "metadata/advisory/severity";
+    private final String descriptionPath = "metadata/description";
+    private final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
+    private final Calendar cal = Calendar.getInstance();
+    private final String dateStamp = sdf.format(cal.getTime());
+    private final String hostname = new BufferedReader(new InputStreamReader(Runtime.getRuntime().exec("hostname").getInputStream())).readLine();
 
-    public OvalFileReader(File inputFile) throws IOException, ParserConfigurationException, SAXException {
-        super(inputFile);
+    public OvalFileReader(File inputFile, ElasticWriter output) throws ParserConfigurationException, SAXException, IOException, XPathExpressionException {
+        super(inputFile, output);
     }
 
-    public OvalResults parse() throws IOException, SAXException, ParserConfigurationException, XPathExpressionException {
-        OvalResults r = new OvalResults();
+    @Override
+    protected void parse() throws IOException, XPathExpressionException {
         XPath xpath = XPathFactory.newInstance().newXPath();
-        String resultsPath="/oval_results/results/system/definitions/definition[@result='true']";
-        String titlePath = "metadata/title";
-        String referencePath = "metadata/reference";
-        String severityPath = "metadata/advisory/severity";
-        String descriptionPath = "metadata/description";
-
-        NodeList resultsList = (NodeList) xpath.compile(resultsPath).evaluate(document, XPathConstants.NODESET);
+        NodeList resultsList = getNodeList(xpath, resultsPath);
         int m = resultsList.getLength();
-        log.info(String.format("There are %d results.", m));
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
-        Calendar cal = Calendar.getInstance();
-        String dateStamp = sdf.format(cal.getTime());
-        String hostname = new BufferedReader(new InputStreamReader(Runtime.getRuntime().exec("hostname").getInputStream())).readLine();
+        log.info(String.format("There are %d OVAL results.", m));
 
         for(int i = 0; i < m; i++){
-            Node node = resultsList.item(i);
-            String id = node.getAttributes().getNamedItem("definition_id").getNodeValue();
-            String vulnerable = node.getAttributes().getNamedItem("result").getNodeValue();
-            if(id.equals("oval:com.ubuntu.focal:def:100")){ // Test for Ubuntu. Since there's no vulnerability, this would fail the severity check
-                log.info("Ubuntu test. Skipping because there's no severity key.");
-                break;
-            }
-            String ovalDefinitionPath = "/oval_results/oval_definitions/definitions/definition[@id='"+id+"']";
-
-            Node cve=((Node)xpath.compile(ovalDefinitionPath).evaluate(document, XPathConstants.NODE));
-            String title = ((Node) xpath.compile(titlePath).evaluate(cve, XPathConstants.NODE)).getTextContent();
-            String severity = ((Node) xpath.compile(severityPath).evaluate(cve, XPathConstants.NODE)).getTextContent();
-            String description = ((Node) xpath.compile(descriptionPath).evaluate(cve, XPathConstants.NODE)).getTextContent();
-            String refUrl = ((Node) xpath.compile(referencePath).evaluate(cve, XPathConstants.NODE)).getAttributes().getNamedItem("ref_url").getNodeValue();
-            String refId = ((Node) xpath.compile(referencePath).evaluate(cve, XPathConstants.NODE)).getAttributes().getNamedItem("ref_id").getNodeValue();
-            CVE c = new CVE(dateStamp, hostname, vulnerable, refId, refUrl, title, severity, description);
-            r.putCVE(c);
+            CVE c = getCVE(xpath, resultsList, i);
+            if (c == null) break;
+            output.sendOne(c.toJSON());
+            count++;
         }
-        return r;
+    }
+
+    private CVE getCVE(XPath xpath, NodeList resultsList, int i) throws XPathExpressionException {
+        Node node = resultsList.item(i);
+        String id = node.getAttributes().getNamedItem("definition_id").getNodeValue();
+        if(id.equals("oval:com.ubuntu.focal:def:100")){ // Test for Ubuntu. Since there's no vulnerability, this would fail the severity check
+            log.debug("Ubuntu test. Skipping because there's no severity key.");
+            return null;
+        }
+        String ovalDefinitionPath = "/oval_results/oval_definitions/definitions/definition[@id='"+id+"']";
+
+        Node cve=((Node) xpath.compile(ovalDefinitionPath).evaluate(document, XPathConstants.NODE));
+        String title = getNamedTextContent(xpath, cve, titlePath);
+        String vulnerable = node.getAttributes().getNamedItem("result").getNodeValue();
+        String severity = getNamedTextContent(xpath, cve, severityPath);
+        String description = getNamedTextContent(xpath, cve, descriptionPath);
+        String refUrl = getNamedNodeValue(xpath, cve, referencePath, "ref_url");
+        String refId = getNamedNodeValue(xpath, cve, referencePath,"ref_id");
+        return new CVE(dateStamp, hostname, vulnerable, refId, refUrl, title, severity, description);
     }
 }
